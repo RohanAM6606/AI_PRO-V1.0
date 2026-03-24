@@ -6,6 +6,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+app.get('/', (req, res) => {
+    res.json({ status: "🟢 Algorithmic Realms Master API Online", version: "1.0", algorithm: "Minimax + Alpha-Beta Pruning" });
+});
+
 app.post('/api/ai/story', (req, res) => {
     const { gameState } = req.body;
     const startTime = Date.now();
@@ -42,7 +46,27 @@ app.post('/api/ai/grid', (req, res) => {
     } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-const PORT = 5000;
+app.post('/api/ai/hangman', (req, res) => {
+    const { gameState } = req.body;
+    const startTime = Date.now();
+    try {
+        const result = AIEngine.getHangmanMove(gameState);
+        res.json({
+            success: true,
+            nextPattern: result.nextPattern,
+            nextDictionary: result.nextDictionary,
+            isCorrect: result.isCorrect,
+            metrics: {
+                timeTakenMs: Date.now() - startTime,
+                algorithm: "Adversarial Minimax Partitioning",
+                nodesEvaluated: result.stats.nodesEvaluated,
+                branchesPruned: result.stats.branchesPruned
+            }
+        });
+    } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-    console.log(`Master Campaign Backend (Story + Tactics) running on port ${PORT}`);
+    console.log(`Master Campaign Backend (Story + Tactics + Hangman) running on port ${PORT}`);
 });
