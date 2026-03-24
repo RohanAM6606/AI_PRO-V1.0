@@ -1,97 +1,75 @@
+const ENCOUNTERS = [
+  { id: 'goblin_ambush', name: 'Goblin Ambush', damage: 15, heal: 0, reward: 10, text: "A band of frenzied goblins drops from the cavern ceiling!" },
+  { id: 'healing_fountain', name: 'Healing Fountain', damage: 0, heal: 30, reward: 0, text: "You discover a glowing fountain emitting a restorative aura." },
+  { id: 'puzzle_trap', name: 'Ancient Puzzle Trap', damage: 25, heal: 0, reward: 25, text: "Click. The stone door locks. Poisonous gas starts filling the chamber!" },
+  { id: 'orc_brute', name: 'Orc Brute', damage: 35, heal: 0, reward: 30, text: "A massive Orc Brute blocks your path, wielding a crude hammer." },
+  { id: 'empty_room', name: 'Quiet Catacombs', damage: 0, heal: 0, reward: 5, text: "A quiet, undisturbed crypt. Take a breather." }
+];
+
 class AIEngine {
-  // TSP implementation to find the optimal targeting path for movement efficiency
-  static solveTSP(startPoint, targets) {
-    if (targets.length === 0) return [];
-    
-    let bestPath = null;
-    let minDistance = Infinity;
-    
-    const calculateDistance = (p1, p2) => Math.abs(p1.x - p2.x) + Math.abs(p1.y - p2.y);
-    
-    const permute = (arr, currentPath, currentDist, currentPos) => {
-      if (arr.length === 0) {
-        if (currentDist < minDistance) {
-          minDistance = currentDist;
-          bestPath = [...currentPath];
-        }
-        return;
-      }
-      for (let i = 0; i < arr.length; i++) {
-        let nextNode = arr[i];
-        let dist = calculateDistance(currentPos, nextNode);
-        if (currentDist + dist >= minDistance) continue; // Basic pruning
-        
-        let remaining = arr.filter((_, idx) => idx !== i);
-        currentPath.push(nextNode);
-        permute(remaining, currentPath, currentDist + dist, nextNode);
-        currentPath.pop();
-      }
-    };
-    
-    permute(targets, [], 0, startPoint);
-    return bestPath;
+  // ============================================
+  // LEVEL 1: STORY ADVENTURE MINIMAX
+  // ============================================
+  static evaluateStory(state) {
+    const targetHp = state.player.maxHp * 0.45;
+    const hpDiff = Math.abs(state.player.hp - targetHp); 
+    if (state.player.hp <= 0) return -10000;
+    return -hpDiff + (state.player.gold * 0.2);
   }
 
-  // Heuristic: Net HP differential
-  static evaluateState(state) {
+  static simulateStoryTurn(state, encounter) {
+     let nextState = JSON.parse(JSON.stringify(state));
+     nextState.player.hp -= encounter.damage;
+     nextState.player.hp += encounter.heal;
+     nextState.player.gold += encounter.reward;
+     nextState.player.level += 1;
+     if (nextState.player.hp > nextState.player.maxHp) nextState.player.hp = nextState.player.maxHp;
+     return nextState;
+  }
+
+  static minimaxStory(state, depth, alpha, beta, stats) {
+    if (depth === 0 || state.player.hp <= 0) {
+      stats.nodesEvaluated++;
+      return { score: this.evaluateStory(state), encounter: null };
+    }
+    let maxEval = -Infinity;
+    let bestEncounter = null;
+    for (const enc of ENCOUNTERS) {
+       if (enc.id === 'healing_fountain' && state.player.hp >= state.player.maxHp) continue;
+       
+       let nextState = this.simulateStoryTurn(state, enc);
+       let ev = this.minimaxStory(nextState, depth - 1, alpha, beta, stats).score;
+       
+       if (ev > maxEval) { maxEval = ev; bestEncounter = enc; }
+       alpha = Math.max(alpha, ev);
+       if (beta <= alpha) { stats.branchesPruned++; break; }
+    }
+    return { score: maxEval, encounter: bestEncounter };
+  }
+
+  static getBestStoryMove(initialState) {
+    let stats = { nodesEvaluated: 0, branchesPruned: 0 };
+    let result = this.minimaxStory(initialState, 3, -Infinity, Infinity, stats);
+    let enc = result.encounter || ENCOUNTERS[0];
+    enc.heuristicScore = Math.floor(result.score);
+    return { encounter: enc, stats };
+  }
+
+  // ============================================
+  // LEVEL 2: TACTICAL GRID MINIMAX
+  // ============================================
+  static evaluateGrid(state) {
     let aiHp = state.units.filter(u => u.team === 'ai').reduce((sum, u) => sum + u.hp, 0);
     let playerHp = state.units.filter(u => u.team === 'player').reduce((sum, u) => sum + u.hp, 0);
-    return aiHp - playerHp;
+    return aiHp - playerHp; // Maximize AI Health, Minimize Player Health
   }
 
-  // Generate tactical variations to evaluate
-  static generateMoves(state, team) {
-    const teamUnits = state.units.filter(u => u.team === team && u.hp > 0);
-    const enemies = state.units.filter(u => u.team !== team && u.hp > 0);
-    if (teamUnits.length === 0 || enemies.length === 0) return [state];
-
-    let possibleStates = [];
-
-    // Strategy 1: TSP Optimization (Focus on optimal pathing)
-    let s1 = JSON.parse(JSON.stringify(state));
-    for (let u of s1.units.filter(unit => unit.team === team && unit.hp > 0)) {
-        let myEnemies = s1.units.filter(en => en.team !== team && en.hp > 0);
-        if(myEnemies.length === 0) break;
-        
-        const path = this.solveTSP({x: u.x, y: u.y}, myEnemies);
-        let target = path[0];
-        this.executeIntent(u, target);
-    }
-    s1.units = s1.units.filter(u => u.hp > 0);
-    possibleStates.push(s1);
-
-    // Strategy 2: Focus Fire (All target the weakest enemy)
-    let s2 = JSON.parse(JSON.stringify(state));
-    let weakestEnemy = [...s2.units].filter(en => en.team !== team && en.hp > 0).sort((a,b) => a.hp - b.hp)[0];
-    if(weakestEnemy) {
-        for (let u of s2.units.filter(unit => unit.team === team && unit.hp > 0)) {
-            this.executeIntent(u, weakestEnemy);
-        }
-    }
-    s2.units = s2.units.filter(u => u.hp > 0);
-    possibleStates.push(s2);
-
-    // Strategy 3: Nearest Neighbor (Greedy Attack)
-    let s3 = JSON.parse(JSON.stringify(state));
-    for (let u of s3.units.filter(unit => unit.team === team && unit.hp > 0)) {
-        let myEnemies = s3.units.filter(en => en.team !== team && en.hp > 0);
-        if(myEnemies.length === 0) break;
-        let nearest = myEnemies.map(en => ({en, dist: Math.abs(u.x - en.x) + Math.abs(u.y - en.y)})).sort((a,b)=>a.dist - b.dist)[0].en;
-        this.executeIntent(u, nearest);
-    }
-    s3.units = s3.units.filter(u => u.hp > 0);
-    possibleStates.push(s3);
-
-    return possibleStates;
-  }
-
-  static executeIntent(unit, target) {
+  static executeGridIntent(unit, target) {
       const dist = Math.abs(unit.x - target.x) + Math.abs(unit.y - target.y);
       if (dist <= unit.range) {
           target.hp -= unit.attack;
           unit.action = 'attack';
       } else {
-          // move 1 step towards target
           if (unit.x < target.x) unit.x += 1;
           else if (unit.x > target.x) unit.x -= 1;
           else if (unit.y < target.y) unit.y += 1;
@@ -100,51 +78,76 @@ class AIEngine {
       }
   }
 
-  // Minimax with Alpha-Beta Pruning
-  static minimax(state, depth, alpha, beta, maximizingPlayer) {
-    if (depth === 0) return { score: this.evaluateState(state), state: state };
+  static generateGridMoves(state, team) {
+    const teamUnits = state.units.filter(u => u.team === team && u.hp > 0);
+    const enemies = state.units.filter(u => u.team !== team && u.hp > 0);
+    if (teamUnits.length === 0 || enemies.length === 0) return [state];
+
+    let possibleStates = [];
+    const calcDist = (p1, p2) => Math.abs(p1.x - p2.x) + Math.abs(p1.y - p2.y);
+
+    // Strat 1: Focus weakest (Guaranteed Kill setup)
+    let s1 = JSON.parse(JSON.stringify(state));
+    let weakest = s1.units.filter(en => en.team !== team && en.hp > 0).sort((a,b) => a.hp - b.hp)[0];
+    if(weakest) {
+        for (let u of s1.units.filter(u => u.team === team && u.hp > 0)) { this.executeGridIntent(u, weakest); }
+        s1.units = s1.units.filter(u => u.hp > 0);
+        possibleStates.push(s1);
+    }
+
+    // Strat 2: Greedy Nearest (Basic spatial approach)
+    let s2 = JSON.parse(JSON.stringify(state));
+    for (let u of s2.units.filter(u => u.team === team && u.hp > 0)) {
+        let nearest = s2.units.filter(en => en.team !== team && en.hp > 0).sort((a,b)=>calcDist(u, a) - calcDist(u, b))[0];
+        if(nearest) this.executeGridIntent(u, nearest);
+    }
+    s2.units = s2.units.filter(u => u.hp > 0);
+    possibleStates.push(s2);
+
+    return possibleStates;
+  }
+
+  static minimaxGrid(state, depth, alpha, beta, maximizingPlayer, stats) {
+    if (depth === 0) {
+        stats.nodesEvaluated++;
+        return { score: this.evaluateGrid(state), state: state };
+    }
     
     let isGameOver = state.units.filter(u => u.team === 'ai').length === 0 || state.units.filter(u => u.team === 'player').length === 0;
-    if (isGameOver) return { score: this.evaluateState(state), state: state };
+    if (isGameOver) {
+        stats.nodesEvaluated++;
+        return { score: this.evaluateGrid(state), state: state };
+    }
 
     if (maximizingPlayer) {
       let maxEval = -Infinity;
       let bestState = null;
-      let possibleMoves = this.generateMoves(state, 'ai');
-      
+      let possibleMoves = this.generateGridMoves(state, 'ai');
       for (const nextState of possibleMoves) {
-        let ev = this.minimax(nextState, depth - 1, alpha, beta, false).score;
-        if (ev > maxEval) {
-            maxEval = ev;
-            bestState = nextState;
-        }
+        let ev = this.minimaxGrid(nextState, depth - 1, alpha, beta, false, stats).score;
+        if (ev > maxEval) { maxEval = ev; bestState = nextState; }
         alpha = Math.max(alpha, ev);
-        if (beta <= alpha) break; // Pruning
+        if (beta <= alpha) { stats.branchesPruned++; break; }
       }
-      return { score: maxEval, state: bestState };
+      return { score: maxEval, state: bestState || possibleMoves[0] };
     } else {
       let minEval = Infinity;
       let bestState = null;
-      let possibleMoves = this.generateMoves(state, 'player');
-      
+      let possibleMoves = this.generateGridMoves(state, 'player');
       for (const nextState of possibleMoves) {
-        let ev = this.minimax(nextState, depth - 1, alpha, beta, true).score;
-        if (ev < minEval) {
-            minEval = ev;
-            bestState = nextState;
-        }
+        let ev = this.minimaxGrid(nextState, depth - 1, alpha, beta, true, stats).score;
+        if (ev < minEval) { minEval = ev; bestState = nextState; }
         beta = Math.min(beta, ev);
-        if (beta <= alpha) break; // Pruning
+        if (beta <= alpha) { stats.branchesPruned++; break; }
       }
-      return { score: minEval, state: bestState };
+      return { score: minEval, state: bestState || possibleMoves[0] };
     }
   }
 
-  static getBestMove(initialState) {
-    // Simulate 4 half-turns ahead (2 full AI-Player turns)
-    const result = this.minimax(initialState, 4, -Infinity, Infinity, true);
-    // Return just the immediate next state selected by the algorithm
-    return result.state;
+  static getBestGridMove(initialState) {
+    let stats = { nodesEvaluated: 0, branchesPruned: 0 };
+    const result = this.minimaxGrid(initialState, 4, -Infinity, Infinity, true, stats);
+    return { nextState: result.state, stats };
   }
 }
 

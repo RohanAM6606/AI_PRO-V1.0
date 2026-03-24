@@ -1,302 +1,268 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Play, RotateCcw, Shield, ChevronDown, Sword, Activity, Pickaxe } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Play, FileText, Settings, Shield, Swords, Compass, Activity, Server, Target, Cpu, CheckCircle, Heart, Coins, Zap } from 'lucide-react';
 
-const TROOP_TYPES = [
-  { type: 'Steve', symbol: '👦', hp: 200, attack: 40, range: 1 },
-  { type: 'Iron Golem', symbol: '🤖', hp: 800, attack: 100, range: 1 },
-  { type: 'Snow Golem', symbol: '⛄', hp: 100, attack: 20, range: 4 },
-  { type: 'Wolf', symbol: '🐺', hp: 150, attack: 30, range: 1 },
-  { type: 'Villager', symbol: '👨‍🌾', hp: 100, attack: 0, range: 0 },
-  { type: 'TNT', symbol: '🧨', hp: 50, attack: 200, range: 2 },
-  { type: 'Alex', symbol: '👧', hp: 200, attack: 50, range: 2 }
-];
+/* =========================================
+   MASTER APP CONTROLLER & NAVIGATION
+========================================= */
+export default function App() {
+  const [view, setView] = useState('landing'); // 'landing', 'about', 'lvl1', 'lvl2'
+  const [globalPlayer, setGlobalPlayer] = useState({ hp: 100, maxHp: 100, gold: 10, level: 1 });
 
-const INITIAL_STATE = {
-  gridSize: 12,
-  units: [
-    { id: 'a1', team: 'ai', x: 5, y: 5, hp: 500, maxHp: 500, attack: 60, range: 1, type: 'Zombie', symbol: '🧟' },
-    { id: 'a2', team: 'ai', x: 4, y: 4, hp: 300, maxHp: 300, attack: 40, range: 5, type: 'Skeleton', symbol: '💀' },
-    { id: 'a3', team: 'ai', x: 6, y: 4, hp: 300, maxHp: 300, attack: 40, range: 5, type: 'Skeleton', symbol: '💀' },
-    { id: 'a4', team: 'ai', x: 4, y: 6, hp: 200, maxHp: 200, attack: 150, range: 1, type: 'Creeper', symbol: '💥' },
-    { id: 'a5', team: 'ai', x: 6, y: 6, hp: 200, maxHp: 200, attack: 150, range: 1, type: 'Creeper', symbol: '💥' },
-    { id: 'a6', team: 'ai', x: 5, y: 3, hp: 250, maxHp: 250, attack: 30, range: 2, type: 'Spider', symbol: '🕷️' },
-    { id: 'a7', team: 'ai', x: 5, y: 7, hp: 250, maxHp: 250, attack: 30, range: 2, type: 'Spider', symbol: '🕷️' },
-    { id: 'a8', team: 'ai', x: 3, y: 5, hp: 600, maxHp: 600, attack: 80, range: 1, type: 'Enderman', symbol: '👁️' },
-    { id: 'a9', team: 'ai', x: 7, y: 5, hp: 600, maxHp: 600, attack: 80, range: 1, type: 'Enderman', symbol: '👁️' },
-    { id: 'a10', team: 'ai', x: 5, y: 2, hp: 1500, maxHp: 1500, attack: 120, range: 4, type: 'Wither', symbol: '👻' },
-    { id: 'a11', team: 'ai', x: 5, y: 9, hp: 2000, maxHp: 2000, attack: 200, range: 5, type: 'Ender Dragon', symbol: '🐉' },
-    { id: 'a12', team: 'ai', x: 3, y: 3, hp: 300, maxHp: 300, attack: 40, range: 5, type: 'Stray', symbol: '🏹' },
-    { id: 'a13', team: 'ai', x: 7, y: 7, hp: 400, maxHp: 400, attack: 50, range: 1, type: 'Zombie Pigman', symbol: '🐖' }
-  ]
-};
-
-function HeroSection({ onScrollToGame }) {
   return (
-    <div className="hero-section">
-      <div className="hero-overlay"></div>
-      <motion.div 
-        className="hero-content"
-        initial={{ opacity: 0, y: 50 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8 }}
-      >
-        <h1 className="mc-title">MINEMAX AI</h1>
-        <p className="hero-subtitle">Survive the night. Deploy Golems, TNT, and Heroes to defeat the hostile mob invasion.</p>
-        <button className="mc-btn cta-btn" onClick={onScrollToGame}>
-          <Pickaxe size={28} style={{ marginRight: '10px' }} />
-          ENTER OVERWORLD
-        </button>
-      </motion.div>
-      <div className="scroll-indicator" onClick={onScrollToGame}>
-        <ChevronDown size={36} />
-      </div>
+    <div className="app-canvas">
+      {/* GLOBAL NAVBAR */}
+      <nav className="navbar">
+         <div className="nav-brand"><Server size={20} className="mr-2"/> D&D ENGINE</div>
+         <div className="nav-links">
+            <button className={`nav-btn ${view==='landing'?'active':''}`} onClick={()=>setView('landing')}>Home</button>
+            <button className={`nav-btn ${view==='about'?'active':''}`} onClick={()=>setView('about')}>Architecture</button>
+            <button className="nav-btn accent" onClick={()=>setView('lvl1')}>Play Campaign</button>
+         </div>
+      </nav>
+
+      {/* VIEWS */}
+      {view === 'landing' && <LandingPage setView={setView} />}
+      {view === 'about' && <AboutPage />}
+      {view === 'lvl1' && <LevelOneStory setView={setView} player={globalPlayer} setPlayer={setGlobalPlayer} />}
+      {view === 'lvl2' && <LevelTwoGrid setView={setView} player={globalPlayer} />}
     </div>
   );
 }
 
-function Simulator({ simulatorRef }) {
-  const [gameState, setGameState] = useState(INITIAL_STATE);
+/* =========================================
+   LANDING PAGE
+========================================= */
+function LandingPage({ setView }) {
+  return (
+    <div className="page-view flex-center">
+       <div className="hero-content">
+          <h1 className="hero-title">ALGORITHMIC REALMS</h1>
+          <p className="hero-subtitle">Experience a dynamic duo-level campaign powered natively by Minimax and Alpha-Beta Cutoffs. Survive the Dungeon Master's generated story, then command your tactics on the physical grid.</p>
+          <div className="hero-buttons mt-4">
+             <button className="main-btn primary" onClick={() => setView('lvl1')}><Play size={18} className="mr-2"/> Commence Level 1</button>
+             <button className="main-btn secondary" onClick={() => setView('about')}><Settings size={18} className="mr-2"/> System Architecture</button>
+          </div>
+       </div>
+    </div>
+  );
+}
+
+/* =========================================
+   ABOUT / SYSTEM ARCHITECTURE PAGE
+========================================= */
+function AboutPage() {
+  return (
+    <div className="page-view doc-page">
+       <h2 className="doc-title">System Architecture</h2>
+       <div className="doc-grid">
+          <div className="doc-card">
+             <h3><FileText size={20}/> Level 1: Narrative Minimax</h3>
+             <p>The backend evaluates mathematical tension. Instead of killing the player instantly, it generates 3-turn-deep Game Trees assessing encounters (Traps, Goblins, Fountains) to keep player HP hovering around 45%.</p>
+          </div>
+          <div className="doc-card">
+             <h3><Target size={20}/> Level 2: Spatial Grid Minimax</h3>
+             <p>Once inside the Boss Room, the algorithm switches to a pure zero-sum spatial engine. It calculates physical distancing, line-of-sight, and deterministic greedy combat intent to dismantle your positioning.</p>
+          </div>
+          <div className="doc-card">
+             <h3><Zap size={20}/> Alpha-Beta Exhaustion</h3>
+             <p>Both levels utilize pristine Alpha-Beta Branch Cutoffs. Redundant logical branches (e.g., buying a potion when you have 0 gold) are mathematically severed before computational time is wasted natively in V8.</p>
+          </div>
+       </div>
+    </div>
+  );
+}
+
+/* =========================================
+   LEVEL 1: STORY ADVENTURE
+========================================= */
+function LevelOneStory({ setView, player, setPlayer }) {
+  const [history, setHistory] = useState([
+    { id: 0, text: "LEVEL 1. The algorithms have dropped you into a dark crypt. Survive 3 encounters to reach the Boss Room.", type: 'system' }
+  ]);
+  const [activeEncounter, setActiveEncounter] = useState(null);
+  const [encounterCount, setEncounterCount] = useState(0);
+  const logEndRef = useRef(null);
+
+  useEffect(() => { logEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [history, activeEncounter]);
+
+  const addLog = (text, type = 'story') => {
+    setHistory(prev => [...prev, { id: Date.now() + Math.random(), text, type }]);
+  };
+
+  const requestNextEncounter = async (currentPlayerState) => {
+    if (encounterCount >= 3) {
+        addLog("✅ You have survived Level 1! The massive iron doors to the Boss Room unlock.", 'outcome');
+        setActiveEncounter({ isEnd: true });
+        return;
+    }
+    
+    try {
+      const res = await axios.post('http://localhost:5000/api/ai/story', { gameState: { player: currentPlayerState } });
+      setActiveEncounter(res.data.nextState);
+      addLog(`> DM Spawns: ${res.data.nextState.text}`, 'encounter');
+    } catch (err) { addLog(`Error: ${err.message}`, 'system'); }
+  };
+
+  const handleAction = (actionType) => {
+    let newPlayer = { ...player };
+    let cEncounter = activeEncounter;
+    
+    if (actionType === 'fight') { newPlayer.hp -= cEncounter.damage; newPlayer.gold += cEncounter.reward; addLog(`You fought! Lost ${cEncounter.damage} HP, gained ${cEncounter.reward} Gold.`, 'outcome'); }
+    else if (actionType === 'interact') {
+       if (cEncounter.damage > 0) { newPlayer.hp -= (cEncounter.damage + 5); addLog("It was a trap! You took horrific damage.", "outcome"); }
+       else { newPlayer.hp += cEncounter.heal; addLog(`You interacted safely and healed ${cEncounter.heal} HP.`, 'outcome'); }
+    }
+    
+    newPlayer.level += 1;
+    if (newPlayer.hp > newPlayer.maxHp) newPlayer.hp = newPlayer.maxHp;
+    setPlayer(newPlayer);
+    setActiveEncounter(null);
+    setEncounterCount(cnt => cnt + 1);
+
+    if (newPlayer.hp <= 0) addLog("💀 YOU DIED IN LEVEL 1.", 'system');
+    else setTimeout(() => requestNextEncounter(newPlayer), 1000);
+  };
+
+  return (
+    <div className="page-view flex-row">
+       {/* UI HUD */}
+       <div className="hud-panel">
+          <h3>Player Sheet</h3>
+          <div className="hud-stats">
+              <p><Heart size={16} color="#ff6b6b"/> HP: {player.hp}/{player.maxHp}</p>
+              <p><Coins size={16} color="#f59e0b"/> Gold: {player.gold}</p>
+              <p><Shield size={16} color="#a4b0be"/> Level: {player.level}</p>
+              <hr/>
+              <p className="text-muted"><Compass size={16}/> Rooms Survived: {encounterCount}/3</p>
+          </div>
+       </div>
+
+       {/* LOG & CONSOLE */}
+       <div className="main-console">
+          <div className="story-log">
+             <AnimatePresence>
+                {history.map(item => <motion.div key={item.id} className={`story-entry ${item.type}`}>{item.text}</motion.div>)}
+             </AnimatePresence>
+             <div ref={logEndRef} />
+          </div>
+
+          <div className="controls-bar">
+             {!activeEncounter && player.hp > 0 && encounterCount === 0 && (
+                <button className="main-btn primary" onClick={() => requestNextEncounter(player)}>Start Encounter Generation</button>
+             )}
+             {activeEncounter && !activeEncounter.isEnd && player.hp > 0 && (
+                <div className="action-row">
+                   <button className="main-btn btn-atk" onClick={() => handleAction('fight')}><Swords size={16}/> Fight</button>
+                   <button className="main-btn btn-int" onClick={() => handleAction('interact')}><Activity size={16}/> Interact</button>
+                </div>
+             )}
+             {activeEncounter?.isEnd && (
+                <button className="main-btn victory" onClick={() => setView('lvl2')}><CheckCircle size={16}/> Advance to Level 2 (Grid Combat)</button>
+             )}
+             {player.hp <= 0 && <span className="text-red">Simulation Dead.</span>}
+          </div>
+       </div>
+    </div>
+  );
+}
+
+/* =========================================
+   LEVEL 2: COMBAT TACTICAL GRID
+========================================= */
+function LevelTwoGrid({ setView, player }) {
+  const [gameState, setGameState] = useState({
+      gridSize: 8,
+      units: [
+         { id: 'p1', team: 'player', x: 1, y: 1, hp: player.hp, maxHp: player.maxHp, attack: 40, range: 1, type: 'Hero' },
+         { id: 'a1', team: 'ai', x: 6, y: 6, hp: 120, maxHp: 120, attack: 30, range: 2, type: 'Dark Lord Boss' },
+         { id: 'a2', team: 'ai', x: 6, y: 5, hp: 50, maxHp: 50, attack: 20, range: 1, type: 'Minion Guard' },
+      ]
+  });
   const [isBattling, setIsBattling] = useState(false);
-  const [selectedTroop, setSelectedTroop] = useState(TROOP_TYPES[0]);
-  const [logs, setLogs] = useState(["[Server] Welcome to the Overworld.", "[Server] Select an item from your Hotbar and click a grass block."]);
   const [metrics, setMetrics] = useState(null);
 
-  const addLog = (msg) => {
-    setLogs(prev => {
-        const next = [msg, ...prev];
-        return next.slice(0, 10);
-    });
-  };
-
-  const handleCellClick = (x, y) => {
-    if (isBattling) return;
-    setGameState(prev => {
-      let newUnits = [...prev.units];
-      const unitIdx = newUnits.findIndex(u => u.x === x && u.y === y);
-      
-      if (unitIdx !== -1) {
-        if (newUnits[unitIdx].team === 'player') {
-          newUnits.splice(unitIdx, 1);
-        }
-      } else {
-        newUnits.push({
-          id: 'p' + Date.now() + Math.random(),
-          team: 'player', 
-          x, y, 
-          hp: selectedTroop.hp, maxHp: selectedTroop.hp, 
-          attack: selectedTroop.attack, range: selectedTroop.range, 
-          type: selectedTroop.type, symbol: selectedTroop.symbol
-        });
-      }
-      return { ...prev, units: newUnits };
-    });
-  };
-
   const resolvePlayerMove = (state) => {
-    let newState = JSON.parse(JSON.stringify(state));
-    for (let u of newState.units.filter(unit => unit.team === 'player' && unit.hp > 0)) {
-        let enemies = newState.units.filter(en => en.team === 'ai' && en.hp > 0);
-        if (enemies.length === 0) continue;
-        
-        // Simple TNT logic: Explodes and dies instantly if in range
-        if (u.type === 'TNT') {
-             let nearest = enemies.sort((a,b) => (Math.abs(u.x - a.x) + Math.abs(u.y - a.y)) - (Math.abs(u.x - b.x) + Math.abs(u.y - b.y)))[0];
-             let dist = Math.abs(u.x - nearest.x) + Math.abs(u.y - nearest.y);
-             if (dist <= u.range) {
-                 nearest.hp -= u.attack;
-                 u.hp = 0; // Boom
-             }
-             continue; // Doesn't move
-        }
+    let ns = JSON.parse(JSON.stringify(state));
+    let hero = ns.units.find(u => u.team === 'player');
+    let enemies = ns.units.filter(u => u.team === 'ai');
+    if (!hero || enemies.length === 0) return ns;
 
-        if (u.type === 'Villager') continue; // Peaceful, doesn't attack
-        
-        let nearest = enemies.sort((a,b) => (Math.abs(u.x - a.x) + Math.abs(u.y - a.y)) - (Math.abs(u.x - b.x) + Math.abs(u.y - b.y)))[0];
-        let dist = Math.abs(u.x - nearest.x) + Math.abs(u.y - nearest.y);
-        
-        if (dist <= u.range) {
-            nearest.hp -= u.attack;
-        } else {
-            if (u.x < nearest.x) u.x += 1;
-            else if (u.x > nearest.x) u.x -= 1;
-            else if (u.y < nearest.y) u.y += 1;
-            else if (u.y > nearest.y) u.y -= 1;
-        }
+    let nearest = enemies.sort((a,b) => (Math.abs(hero.x - a.x) + Math.abs(hero.y - a.y)) - (Math.abs(hero.x - b.x) + Math.abs(hero.y - b.y)))[0];
+    let dist = Math.abs(hero.x - nearest.x) + Math.abs(hero.y - nearest.y);
+    
+    if (dist <= hero.range) { nearest.hp -= hero.attack; } 
+    else {
+        if (hero.x < nearest.x) hero.x += 1;
+        else if (hero.x > nearest.x) hero.x -= 1;
+        else if (hero.y < nearest.y) hero.y += 1;
+        else if (hero.y > nearest.y) hero.y -= 1;
     }
-    newState.units = newState.units.filter(u => u.hp > 0);
-    return newState;
+    ns.units = ns.units.filter(u => u.hp > 0);
+    return ns;
   };
 
   const executeTurn = async () => {
-    if (!isBattling) return;
+      let stateP = resolvePlayerMove(gameState);
+      if (stateP.units.filter(u => u.team === 'ai').length === 0) { setIsBattling(false); alert("VICTORY! YOU CLEARED LEVEL 2!"); return; }
+      if (stateP.units.filter(u => u.team === 'player').length === 0) { setIsBattling(false); alert("YOU DIED ON LEVEL 2!"); return; }
+      
+      try {
+         const res = await axios.post('http://localhost:5000/api/ai/grid', { gameState: stateP });
+         setGameState(res.data.nextState);
+         setMetrics(res.data.metrics);
+         
+         const aiLeft = res.data.nextState.units.filter(u=>u.team==='ai').length;
+         const pLeft = res.data.nextState.units.filter(u=>u.team==='player').length;
+         if(aiLeft===0) { setIsBattling(false); alert("VICTORY! You defeated the Boss!"); }
+         if(pLeft===0) { setIsBattling(false); alert("SLAUGHTERED BY THE AI BOSS."); }
 
-    try {
-        let stateAfterPlayer = resolvePlayerMove(gameState);
-        setGameState(stateAfterPlayer);
-        
-        const aiUnitsLeft = stateAfterPlayer.units.filter(u => u.team === 'ai').length;
-        const playerUnitsLeft = stateAfterPlayer.units.filter(u => u.team === 'player').length;
-
-        if (aiUnitsLeft === 0) {
-            addLog("<System> Hostile mobs cleared. You survived!");
-            setIsBattling(false);
-            return;
-        }
-        if (playerUnitsLeft === 0) {
-            addLog("<System> You died! Spawn area overrun.");
-            setIsBattling(false);
-            return;
-        }
-
-        const res = await axios.post('http://localhost:5000/api/ai/move', { gameState: stateAfterPlayer });
-        
-        setGameState(res.data.nextState);
-        setMetrics(res.data.metrics);
-        addLog(`<Herobrine> Calculated next strike in ${res.data.metrics.timeTakenMs}ms.`);
-
-    } catch (err) {
-        addLog(`<System> Exception raised: ${err.message}`);
-        setIsBattling(false);
-    }
+      } catch (err) { console.error(err); setIsBattling(false); }
   };
 
   useEffect(() => {
-    let interval;
-    if (isBattling) {
-      interval = setInterval(executeTurn, 1800);
-    }
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     let intv;
+     if (isBattling) intv = setInterval(executeTurn, 1000);
+     return () => clearInterval(intv);
   }, [isBattling, gameState]);
 
-  const toggleBattle = () => {
-    if (gameState.units.filter(u => u.team === 'player').length === 0 && !isBattling) {
-       addLog("<System> You need to spawn an entity first!");
-       return;
-    }
-    setIsBattling(!isBattling);
-    if (!isBattling) addLog("<System> Night falls. The hostile mobs are attacking!");
-    else addLog("<System> Time paused.");
-  };
-
-  const resetBattle = () => {
-    setGameState(INITIAL_STATE);
-    setIsBattling(false);
-    setLogs(["[Server] World reset.", "Spawn areas loaded."]);
-    setMetrics(null);
-  };
-
   return (
-    <div className="simulator-section" ref={simulatorRef}>
-      <h2 className="mc-title" style={{fontSize: '4rem', color: '#fff', textAlign: 'center', marginBottom: '40px'}}>THE OVERWORLD</h2>
-      
-      <div className="dashboard">
-        {/* LEFT PANEL */}
-        <div className="mc-panel controls">
-          <div className="mc-panel-header">HOTBAR</div>
+    <div className="page-view flex-row">
+       <div className="hud-panel dark-hud">
+          <h3>Level 2: Boss Combat</h3>
+          <p className="text-muted mt-2">The AI relies strictly on distance vector mapping to hunt you.</p>
+          <button className="main-btn primary mt-4" onClick={() => setIsBattling(!isBattling)}>
+             {isBattling ? "Pause Simulation" : "Start Auto-Battle"}
+          </button>
           
-          <div className="troop-selector">
-             {TROOP_TYPES.map(troop => (
-               <div 
-                 key={troop.type} 
-                 className={`mc-slot ${selectedTroop.type === troop.type ? 'active' : ''}`}
-                 onClick={() => setSelectedTroop(troop)}
-               >
-                 <div className="troop-emoji">{troop.symbol}</div>
-                 <div className="troop-name">{troop.type}</div>
-               </div>
-             ))}
-          </div>
-
-          <div style={{marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '15px'}}>
-            <button className="mc-btn" onClick={toggleBattle}>
-              {isBattling ? "Pause Simulation" : "Start Simulation"}
-            </button>
-            <button className="mc-btn mc-btn-danger" onClick={resetBattle}>
-              Reset World
-            </button>
-          </div>
-
           {metrics && (
-             <motion.div initial={{opacity: 0, scale: 0.95}} animate={{opacity: 1, scale: 1}} className="mc-stats-box">
-                 <h4>Mob Intel</h4>
-                 <p>{metrics.timeTakenMs}ms Latency</p>
-                 <p>{metrics.algorithm}</p>
-             </motion.div>
-          )}
-
-        </div>
-
-        {/* CENTER GRID */}
-        <div className="battlefield-wrapper">
-           <div className="battlefield">
-              {Array.from({length: INITIAL_STATE.gridSize * INITIAL_STATE.gridSize}).map((_, idx) => {
-                  const x = idx % INITIAL_STATE.gridSize;
-                  const y = Math.floor(idx / INITIAL_STATE.gridSize);
-                  const unit = gameState.units.find(u => u.x === x && u.y === y);
-                  
-                  return (
-                      <div key={idx} className="mc-cell" onClick={() => handleCellClick(x, y)} style={{ cursor: isBattling ? 'default' : 'crosshair' }}>
-                          {unit && (
-                              <motion.div 
-                                layoutId={unit.id}
-                                className={`unit ${unit.team}`}
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                transition={{ type: "spring", stiffness: 350, damping: 20 }}
-                              >
-                                  {unit.symbol}
-                                  <div className="unit-hp">
-                                    <div className="hp-bar" style={{width: `${Math.min(100, Math.max(0, (unit.hp / unit.maxHp) * 100))}%`}}></div>
-                                  </div>
-                              </motion.div>
-                          )}
-                      </div>
-                  );
-              })}
-           </div>
-        </div>
-        
-        {/* RIGHT PANEL */}
-        <div className="mc-panel stats-panel">
-             <div className="mc-panel-header">DEBUG SCREEN</div>
-             <div className="mc-stats-content">
-                 <h4 className="text-green">Allied Entities</h4>
-                 <p className="stat-num">{gameState.units.filter(u=>u.team === 'player').length}</p>
-                 <div className="divider"></div>
-                 <h4 className="text-red">Hostile Mobs</h4>
-                 <p className="stat-num">{gameState.units.filter(u=>u.team === 'ai').length}</p>
+             <div className="grid-metrics mt-4">
+                <p><Cpu size={14}/> Node Depth: {metrics.nodesEvaluated}</p>
+                <p><Zap size={14}/> Pruned: {metrics.branchesPruned}</p>
+                <p><Activity size={14}/> Latency: {metrics.timeTakenMs}ms</p>
              </div>
+          )}
+       </div>
 
-             <div className="mc-chat">
-               {logs.map((log, idx) => (
-                  <motion.div key={idx} initial={{opacity:0}} animate={{opacity:1}} style={{color: log.includes('died') || log.includes('overrun') || log.includes('Exception') || log.includes('Compromised') ? '#ff5555' : log.includes('survived') ? '#55ff55' : '#fff', marginBottom: '4px'}}>
-                      {log}
-                  </motion.div>
-               ))}
-            </div>
-        </div>
-
-      </div>
+       <div className="main-console flex-center">
+          <div className="physical-grid">
+             {Array.from({length: 8*8}).map((_, idx) => {
+                 let x = idx % 8; let y = Math.floor(idx / 8);
+                 let unit = gameState.units.find(u => u.x === x && u.y === y);
+                 return (
+                     <div key={idx} className="grid-cell">
+                         {unit && (
+                           <motion.div layoutId={unit.id} className={`grid-unit ${unit.team}`}>
+                              {unit.team === 'player' ? '🛡️' : '☠️'}
+                              <div className="hp-mini-bar" style={{width: `${(unit.hp/unit.maxHp)*100}%`}}></div>
+                           </motion.div>
+                         )}
+                     </div>
+                 )
+             })}
+          </div>
+       </div>
     </div>
   );
 }
-
-function App() {
-  const simulatorRef = useRef(null);
-
-  const scrollToGame = () => {
-    simulatorRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  return (
-    <div className="app-main">
-      <HeroSection onScrollToGame={scrollToGame} />
-      <Simulator simulatorRef={simulatorRef} />
-    </div>
-  );
-}
-
-export default App;

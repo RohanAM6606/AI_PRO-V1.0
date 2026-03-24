@@ -6,27 +6,43 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.post('/api/ai/move', (req, res) => {
-    const gameState = req.body.gameState;
-    
+app.post('/api/ai/story', (req, res) => {
+    const { gameState } = req.body;
     const startTime = Date.now();
-    
-    // Evaluate and get the best AI move (which includes player state emulation)
-    const nextState = AIEngine.getBestMove(gameState);
-    
-    const timeTakenMs = Date.now() - startTime;
-    
-    res.json({
-        success: true,
-        nextState: nextState,
-        metrics: {
-            timeTakenMs: timeTakenMs,
-            algorithm: "Minimax + Alpha-Beta Pruning + TSP"
-        }
-    });
+    try {
+        const result = AIEngine.getBestStoryMove(gameState);
+        res.json({
+            success: true,
+            nextState: result.encounter,
+            metrics: {
+                timeTakenMs: Date.now() - startTime,
+                algorithm: "Minimax + Alpha-Beta Pruning (Tension Score)",
+                nodesEvaluated: result.stats.nodesEvaluated,
+                branchesPruned: result.stats.branchesPruned
+            }
+        });
+    } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-const PORT = process.env.PORT || 5000;
+app.post('/api/ai/grid', (req, res) => {
+    const { gameState } = req.body;
+    const startTime = Date.now();
+    try {
+        const result = AIEngine.getBestGridMove(gameState);
+        res.json({
+            success: true,
+            nextState: result.nextState,
+            metrics: {
+                timeTakenMs: Date.now() - startTime,
+                algorithm: "Minimax + Alpha-Beta (Spatial Grid)",
+                nodesEvaluated: result.stats.nodesEvaluated,
+                branchesPruned: result.stats.branchesPruned
+            }
+        });
+    } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+const PORT = 5000;
 app.listen(PORT, () => {
-    console.log(`BattleMind AI Backend running on port ${PORT}`);
+    console.log(`Master Campaign Backend (Story + Tactics) running on port ${PORT}`);
 });
