@@ -65,10 +65,55 @@ class AIEngine {
   // ============================================
   // LEVEL 2: TACTICAL GRID MINIMAX
   // ============================================
-  static evaluateGrid(state) {
-    let aiHp = state.units.filter(u => u.team === 'ai').reduce((sum, u) => sum + u.hp, 0);
-    let playerHp = state.units.filter(u => u.team === 'player').reduce((sum, u) => sum + u.hp, 0);
-    return aiHp - playerHp;
+  static evaluateGridScore(state, mode = 'balanced') {
+    let aiHp = 0, aiAtk = 0;
+    let playerHp = 0, playerAtk = 0;
+
+    state.units.forEach(u => {
+      if (u.hp > 0) {
+        if (u.team === 'ai') { aiHp += u.hp; aiAtk += u.attack; }
+        else { playerHp += u.hp; playerAtk += u.attack; }
+      }
+    });
+
+    let wHp = 10, wAtk = 5, wRisk = -2;
+    if (mode === 'aggressive') { wHp = 5; wAtk = 15; wRisk = -1; }
+    if (mode === 'defensive') { wHp = 15; wAtk = 2; wRisk = -5; }
+    
+    let hpDiff = aiHp - playerHp;
+    let atkDiff = aiAtk - playerAtk;
+    let riskFactor = (aiHp < 100) ? 10 : 0; // High risk if AI HP is critically low
+
+    return (hpDiff * wHp) + (atkDiff * wAtk) + (riskFactor * wRisk);
+  }
+
+  static evaluateGridExplanation(state, mode = 'balanced') {
+    let aiHp = 0, aiAtk = 0;
+    let playerHp = 0, playerAtk = 0;
+
+    state.units.forEach(u => {
+      if (u.hp > 0) {
+        if (u.team === 'ai') { aiHp += u.hp; aiAtk += u.attack; }
+        else { playerHp += u.hp; playerAtk += u.attack; }
+      }
+    });
+
+    let wHp = 10, wAtk = 5, wRisk = -2;
+    if (mode === 'aggressive') { wHp = 5; wAtk = 15; wRisk = -1; }
+    if (mode === 'defensive') { wHp = 15; wAtk = 2; wRisk = -5; }
+    
+    let hpDiff = aiHp - playerHp;
+    let atkDiff = aiAtk - playerAtk;
+    let riskFactor = (aiHp < 100) ? 10 : 0;
+    let score = (hpDiff * wHp) + (atkDiff * wAtk) + (riskFactor * wRisk);
+
+    return [
+      `AI chose this state because:`,
+      `- Health Difference (${hpDiff}) * [Weight: ${wHp}] = ${hpDiff * wHp}`,
+      `- Attack Potential (${atkDiff}) * [Weight: ${wAtk}] = ${atkDiff * wAtk}`,
+      `- Risk Penalty (${riskFactor}) * [Weight: ${wRisk}] = ${riskFactor * wRisk}`,
+      `Final Heuristic Score: ${score}`
+    ];
   }
 
   static executeGridIntent(unit, target) {
@@ -91,6 +136,8 @@ class AIEngine {
     if (teamUnits.length === 0 || enemies.length === 0) return [state];
     let possibleStates = [];
     const calcDist = (p1, p2) => Math.abs(p1.x - p2.x) + Math.abs(p1.y - p2.y);
+    
+    // Strategy 1: Focus Weakest Target
     let s1 = JSON.parse(JSON.stringify(state));
     let weakest = s1.units.filter(en => en.team !== team && en.hp > 0).sort((a,b) => a.hp - b.hp)[0];
     if(weakest) {
@@ -98,28 +145,54 @@ class AIEngine {
         s1.units = s1.units.filter(u => u.hp > 0);
         possibleStates.push(s1);
     }
+
+    // Strategy 2: Focus Strongest Target
+    let s2 = JSON.parse(JSON.stringify(state));
+    let strongest = s2.units.filter(en => en.team !== team && en.hp > 0).sort((a,b) => b.hp - a.hp)[0];
+    if(strongest && strongest.id !== weakest?.id) {
+        for (let u of s2.units.filter(u => u.team === team && u.hp > 0)) { this.executeGridIntent(u, strongest); }
+        s2.units = s2.units.filter(u => u.hp > 0);
+        possibleStates.push(s2);
+    }
+
+    // Strategy 3: Focus Closest Target (Positional)
+    let s3 = JSON.parse(JSON.stringify(state));
+    for (let u of s3.units.filter(u => u.team === team && u.hp > 0)) {
+        let closest = s3.units.filter(en => en.team !== team && en.hp > 0).sort((a,b) => calcDist(u, a) - calcDist(u, b))[0];
+        if (closest) this.executeGridIntent(u, closest);
+    }
+    s3.units = s3.units.filter(u => u.hp > 0);
+    possibleStates.push(s3);
+
+    // *Move Ordering*: Sort the branches so Alpha-Beta can prune effectively.
+    // Higher damage/better states evaluated first!
+    possibleStates.sort((a, b) => {
+        return this.evaluateGridScore(b, 'balanced') - this.evaluateGridScore(a, 'balanced');
+    });
+
     return possibleStates;
   }
 
-  static minimaxGrid(state, depth, alpha, beta, maximizingPlayer, stats) {
+  static minimaxGrid(state, depth, alpha, beta, maximizingPlayer, stats, config) {
     if (depth === 0) {
         stats.nodesEvaluated++;
-        return { score: this.evaluateGrid(state), state: state };
+        return { score: this.evaluateGridScore(state, config.mode), state: state };
     }
-    let isGameOver = state.units.filter(u => u.team === 'ai').length === 0 || state.units.filter(u => u.team === 'player').length === 0;
-    if (isGameOver) {
+    let aiAlive = state.units.filter(u => u.team === 'ai' && u.hp > 0).length;
+    let pAlive = state.units.filter(u => u.team === 'player' && u.hp > 0).length;
+    if (aiAlive === 0 || pAlive === 0) {
         stats.nodesEvaluated++;
-        return { score: this.evaluateGrid(state), state: state };
+        return { score: this.evaluateGridScore(state, config.mode), state: state };
     }
     if (maximizingPlayer) {
       let maxEval = -Infinity;
       let bestState = null;
       let possibleMoves = this.generateGridMoves(state, 'ai');
       for (const nextState of possibleMoves) {
-        let ev = this.minimaxGrid(nextState, depth - 1, alpha, beta, false, stats).score;
+        let ev = this.minimaxGrid(nextState, depth - 1, alpha, beta, false, stats, config).score;
         if (ev > maxEval) { maxEval = ev; bestState = nextState; }
         alpha = Math.max(alpha, ev);
-        if (beta <= alpha) { stats.branchesPruned++; break; }
+        if (config.usePruning && beta <= alpha) { stats.branchesPruned++; break; }
       }
       return { score: maxEval, state: bestState || possibleMoves[0] };
     } else {
@@ -127,19 +200,20 @@ class AIEngine {
       let bestState = null;
       let possibleMoves = this.generateGridMoves(state, 'player');
       for (const nextState of possibleMoves) {
-        let ev = this.minimaxGrid(nextState, depth - 1, alpha, beta, true, stats).score;
+        let ev = this.minimaxGrid(nextState, depth - 1, alpha, beta, true, stats, config).score;
         if (ev < minEval) { minEval = ev; bestState = nextState; }
         beta = Math.min(beta, ev);
-        if (beta <= alpha) { stats.branchesPruned++; break; }
+        if (config.usePruning && beta <= alpha) { stats.branchesPruned++; break; }
       }
       return { score: minEval, state: bestState || possibleMoves[0] };
     }
   }
 
-  static getBestGridMove(initialState) {
+  static getBestGridMove(initialState, config = { depth: 4, mode: 'balanced', usePruning: true }) {
     let stats = { nodesEvaluated: 0, branchesPruned: 0 };
-    const result = this.minimaxGrid(initialState, 4, -Infinity, Infinity, true, stats);
-    return { nextState: result.state, stats };
+    const result = this.minimaxGrid(initialState, config.depth, -Infinity, Infinity, true, stats, config);
+    let explanation = this.evaluateGridExplanation(result.state || initialState, config.mode);
+    return { nextState: result.state, stats, explanation };
   }
 
   // ============================================

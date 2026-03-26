@@ -29,16 +29,18 @@ app.post('/api/ai/story', (req, res) => {
 });
 
 app.post('/api/ai/grid', (req, res) => {
-    const { gameState } = req.body;
+    const { gameState, config } = req.body;
     const startTime = Date.now();
     try {
-        const result = AIEngine.getBestGridMove(gameState);
+        const aiConfig = config || { depth: 4, mode: 'balanced', usePruning: true };
+        const result = AIEngine.getBestGridMove(gameState, aiConfig);
         res.json({
             success: true,
             nextState: result.nextState,
+            explanation: result.explanation,
             metrics: {
                 timeTakenMs: Date.now() - startTime,
-                algorithm: "Minimax + Alpha-Beta (Spatial Grid)",
+                algorithm: aiConfig.usePruning ? "Minimax + Alpha-Beta Pruning" : "Minimax Only",
                 nodesEvaluated: result.stats.nodesEvaluated,
                 branchesPruned: result.stats.branchesPruned
             }
